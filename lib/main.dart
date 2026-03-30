@@ -156,7 +156,7 @@ class _HomePageState extends State<HomePage>
   String? _cabinetType;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
-  Timer? _debounceTimer; // Debounce timer for automatic search
+  Timer? _debounceTimer;
 
   @override
   void initState() {
@@ -171,17 +171,13 @@ class _HomePageState extends State<HomePage>
     );
     _cabinetType = 'HUAWEI';
 
-    // Add listener for automatic search
     _phoneController.addListener(_onPhoneNumberChanged);
 
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadBundledDataIfEmpty());
   }
 
   void _onPhoneNumberChanged() {
-    // Cancel any pending search
     if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
-
-    // Start a new debounce timer (500ms delay)
     _debounceTimer = Timer(const Duration(milliseconds: 500), () {
       _performSearch();
     });
@@ -388,7 +384,6 @@ class _HomePageState extends State<HomePage>
             backgroundColor: Colors.green,
           ),
         );
-        // Re‑search after import if there's text in the field
         _performSearch();
       }
     } catch (e) {
@@ -405,7 +400,6 @@ class _HomePageState extends State<HomePage>
   }
 
   void _search() {
-    // Keep manual search as fallback (e.g., when tapping the icon)
     _performSearch();
   }
 
@@ -662,19 +656,17 @@ class _HomePageState extends State<HomePage>
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 1400),
-              child: Padding(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   children: [
-                    _buildTopCard(isArabic),
+                    _buildTopCard(isArabic, screenWidth),
                     const SizedBox(height: 24),
-                    Expanded(
-                      child: FadeTransition(
-                        opacity: _fadeAnimation,
-                        child: _result == null
-                            ? _buildEmptyResultCard(isArabic)
-                            : _buildResultCard(_result!, isArabic, screenWidth),
-                      ),
+                    FadeTransition(
+                      opacity: _fadeAnimation,
+                      child: _result == null
+                          ? _buildEmptyResultCard(isArabic)
+                          : _buildResultCard(_result!, isArabic, screenWidth),
                     ),
                   ],
                 ),
@@ -686,7 +678,10 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  Widget _buildTopCard(bool isArabic) {
+  Widget _buildTopCard(bool isArabic, double screenWidth) {
+    // Show import/export buttons only on larger screens (> 600)
+    final showButtons = screenWidth > 600;
+
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
@@ -696,6 +691,7 @@ class _HomePageState extends State<HomePage>
         child: LayoutBuilder(
           builder: (context, constraints) {
             if (constraints.maxWidth > 600) {
+              // Tablet/desktop layout: row with buttons on the right
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -711,30 +707,28 @@ class _HomePageState extends State<HomePage>
                     ),
                   ),
                   const SizedBox(width: 24),
-                  Expanded(
-                    flex: 1,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildImportButton(isArabic),
-                        const SizedBox(height: 12),
-                        _buildExportButton(isArabic),
-                      ],
+                  if (showButtons)
+                    Expanded(
+                      flex: 1,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildImportButton(isArabic),
+                          const SizedBox(height: 12),
+                          _buildExportButton(isArabic),
+                        ],
+                      ),
                     ),
-                  ),
                 ],
               );
             } else {
+              // Phone layout: stacked, no buttons
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildPhoneField(isArabic),
                   const SizedBox(height: 12),
                   _buildCabinetDropdown(isArabic),
-                  const SizedBox(height: 20),
-                  _buildImportButton(isArabic),
-                  const SizedBox(height: 12),
-                  _buildExportButton(isArabic),
                 ],
               );
             }
@@ -979,59 +973,56 @@ class _HomePageState extends State<HomePage>
               ],
             ),
             const Divider(height: 32),
-            Expanded(
-              child: GridView.count(
-                shrinkWrap: false,
-                physics: const AlwaysScrollableScrollPhysics(),
-                crossAxisCount: crossAxisCount,
-                mainAxisSpacing: 16,
-                crossAxisSpacing: 16,
-                childAspectRatio: 2.5,
-                children: fields.map((field) {
-                  String value;
-                  if (field == 'Cabinet Result') {
-                    value = cabinetResult;
-                  } else {
-                    value = record.toMap()[field] ?? '';
-                  }
-                  final label = isArabic ? arabicNames[field]! : field;
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.grey.shade200),
-                    ),
-                    padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          label,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: const Color(0xFF00B4AA),
-                            letterSpacing: 0.3,
-                          ),
+            GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: crossAxisCount,
+              mainAxisSpacing: 16,
+              crossAxisSpacing: 16,
+              childAspectRatio: 2.5,
+              children: fields.map((field) {
+                String value;
+                if (field == 'Cabinet Result') {
+                  value = cabinetResult;
+                } else {
+                  value = record.toMap()[field] ?? '';
+                }
+                final label = isArabic ? arabicNames[field]! : field;
+                return Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF00B4AA),
+                          letterSpacing: 0.3,
                         ),
-                        const SizedBox(height: 6),
-                        Text(
-                          value.isEmpty ? '—' : value,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.black87,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        value.isEmpty ? '—' : value,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.black87,
                         ),
-                      ],
-                    ),
-                  );
-                }).toList(),
-              ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
             ),
           ],
         ),
@@ -1047,5 +1038,6 @@ class _HomePageState extends State<HomePage>
     _animationController.dispose();
     super.dispose();
   }
-  static const String appVersion = '2.1.1';
+
+  static const String appVersion = '2.1.0';
 }
