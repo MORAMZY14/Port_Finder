@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:file_picker/file_picker.dart';
@@ -147,26 +149,66 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
+class _HomePageState extends State<HomePage>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _phoneController = TextEditingController();
   MsaRecord? _result;
   String? _cabinetType;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
+  Timer? _debounceTimer; // Debounce timer for automatic search
 
   @override
   void initState() {
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 100),
     );
     _fadeAnimation = CurvedAnimation(
       parent: _animationController,
       curve: Curves.easeOut,
     );
     _cabinetType = 'HUAWEI';
+
+    // Add listener for automatic search
+    _phoneController.addListener(_onPhoneNumberChanged);
+
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadBundledDataIfEmpty());
+  }
+
+  void _onPhoneNumberChanged() {
+    // Cancel any pending search
+    if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
+
+    // Start a new debounce timer (500ms delay)
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+      _performSearch();
+    });
+  }
+
+  void _performSearch() {
+    final input = _phoneController.text.trim();
+    if (input.isEmpty) {
+      setState(() => _result = null);
+      _animationController.reverse();
+      return;
+    }
+
+    final box = Hive.box<MsaRecord>('msan_records');
+    MsaRecord? found;
+    for (var record in box.values) {
+      if (record.phoneNumber == input) {
+        found = record;
+        break;
+      }
+    }
+    setState(() => _result = found);
+    if (found != null) {
+      _animationController.forward();
+    } else {
+      _animationController.reverse();
+    }
   }
 
   // Load bundled Excel data if the box is empty
@@ -346,6 +388,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             backgroundColor: Colors.green,
           ),
         );
+        // Re‑search after import if there's text in the field
+        _performSearch();
       }
     } catch (e) {
       if (context.mounted) {
@@ -361,27 +405,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   }
 
   void _search() {
-    final input = _phoneController.text.trim();
-    if (input.isEmpty) {
-      setState(() => _result = null);
-      _animationController.reverse();
-      return;
-    }
-
-    final box = Hive.box<MsaRecord>('msan_records');
-    MsaRecord? found;
-    for (var record in box.values) {
-      if (record.phoneNumber == input) {
-        found = record;
-        break;
-      }
-    }
-    setState(() => _result = found);
-    if (found != null) {
-      _animationController.forward();
-    } else {
-      _animationController.reverse();
-    }
+    // Keep manual search as fallback (e.g., when tapping the icon)
+    _performSearch();
   }
 
   String _calculateCabinetResult(MsaRecord record) {
@@ -565,7 +590,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       }
 
       final directory = await getDownloadsDirectory();
-      final filePath = '${directory?.path}/MSAN_Export_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+      final filePath =
+          '${directory?.path}/MSAN_Export_${DateTime.now().millisecondsSinceEpoch}.xlsx';
       final file = File(filePath);
       await file.writeAsBytes(excel.encode()!);
 
@@ -625,10 +651,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFF0F2027),
-              const Color(0xFF203A43),
-              const Color(0xFF2C5364),
+            colors: const [
+              Color(0xFF0F2027),
+              Color(0xFF203A43),
+              Color(0xFF2C5364),
             ],
           ),
         ),
@@ -756,7 +782,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             ),
           ),
           textInputAction: TextInputAction.done,
-          onSubmitted: (_) {},
+          onSubmitted: (_) => _search(),
         ),
       ],
     );
@@ -878,7 +904,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     );
   }
 
-  // ======================== FIXED METHOD ========================
   Widget _buildResultCard(MsaRecord record, bool isArabic, double screenWidth) {
     final fields = [
       'Area Code',
@@ -926,7 +951,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header Row
             Row(
               children: [
                 Container(
@@ -955,11 +979,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               ],
             ),
             const Divider(height: 32),
-            // Scrollable Grid
             Expanded(
               child: GridView.count(
-                shrinkWrap: false, // Let the grid take all available space
-                physics: const AlwaysScrollableScrollPhysics(), // Enable scrolling
+                shrinkWrap: false,
+                physics: const AlwaysScrollableScrollPhysics(),
                 crossAxisCount: crossAxisCount,
                 mainAxisSpacing: 16,
                 crossAxisSpacing: 16,
@@ -978,7 +1001,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: Colors.grey.shade200),
                     ),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -1017,7 +1041,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
+    _phoneController.removeListener(_onPhoneNumberChanged);
+    _phoneController.dispose();
     _animationController.dispose();
     super.dispose();
   }
+  static const String appVersion = '2.1.0';
 }
