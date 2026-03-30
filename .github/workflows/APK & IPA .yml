@@ -4,16 +4,80 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write   # REQUIRED for creating releases
+  contents: write   # Required for pushing commits, tags, and creating releases
 
 jobs:
-  build-apk:
-    name: 🤖 Android APK Build
+  # ---------------------------
+  # 1. Update version & tag
+  # ---------------------------
+  update-version:
+    name: 🔢 Auto‑increment version
     runs-on: ubuntu-latest
-
+    outputs:
+      new_version: ${{ steps.get_version.outputs.new_version }}
+      new_tag: ${{ steps.get_version.outputs.new_tag }}
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0   # Get all tags and history
+
+      - name: Read current version from main.dart
+        id: read_version
+        run: |
+          # Extract the version string from lib/main.dart
+          # Example line: const String appVersion = '1.0.0';
+          VERSION=$(grep -oP "const String appVersion = '\K[^']+" lib/main.dart)
+          echo "current_version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $VERSION"
+
+      - name: Bump patch version
+        id: bump
+        run: |
+          VERSION="${{ steps.read_version.outputs.current_version }}"
+          IFS='.' read -r major minor patch <<< "$VERSION"
+          new_patch=$((patch + 1))
+          NEW_VERSION="$major.$minor.$new_patch"
+          NEW_TAG="v$NEW_VERSION"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION, tag: $NEW_TAG"
+
+      - name: Update lib/main.dart with new version
+        run: |
+          sed -i "s/const String appVersion = '.*';/const String appVersion = '${{ steps.bump.outputs.new_version }}';/" lib/main.dart
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add lib/main.dart
+          git commit -m "chore: bump version to ${{ steps.bump.outputs.new_version }}"
+          git push
+
+      - name: Create tag
+        run: |
+          git tag ${{ steps.bump.outputs.new_tag }}
+          git push origin ${{ steps.bump.outputs.new_tag }}
+
+      - name: Set outputs
+        id: get_version
+        run: |
+          echo "new_version=${{ steps.bump.outputs.new_version }}" >> $GITHUB_OUTPUT
+          echo "new_tag=${{ steps.bump.outputs.new_tag }}" >> $GITHUB_OUTPUT
+
+  # ---------------------------
+  # 2. Build Android APK
+  # ---------------------------
+  build-apk:
+    name: 🤖 Android APK
+    runs-on: ubuntu-latest
+    needs: update-version
+    steps:
+      - name: Checkout at new tag
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ needs.update-version.outputs.new_tag }}
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -31,20 +95,23 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: build/app/outputs/flutter-apk/app-release.apk
-          tag: v2.0
+          tag: ${{ needs.update-version.outputs.new_tag }}
           overwrite: true
-          body: "Android + iOS Build Release"
+          body: "Version ${{ needs.update-version.outputs.new_version }} – Android APK + iOS IPA"
 
+  # ---------------------------
+  # 3. Build iOS IPA
+  # ---------------------------
   build-ios:
-    name: 🍎 iOS IPA Build
+    name: 🍎 iOS IPA
     runs-on: macos-latest
-    needs: build-apk     # Run AFTER APK build
-
+    needs: update-version
     steps:
-      - name: Checkout
+      - name: Checkout at new tag
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0   # REQUIRED for tags and releases
+          ref: ${{ needs.update-version.outputs.new_tag }}
+          fetch-depth: 0
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -79,6 +146,6 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: build/ios/iphoneos/Bid-Game.ipa
-          tag: v2.0
+          tag: ${{ needs.update-version.outputs.new_tag }}
           overwrite: true
-          body: "Android + iOS Build Release"
+          body: "Version ${{ needs.update-version.outputs.new_version }} – Android APK + iOS IPA"
