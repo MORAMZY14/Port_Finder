@@ -1141,5 +1141,5 @@ class _HomePageState extends State<HomePage>
     super.dispose();
   }
 
-  static const String appVersion = '2.1.0';
+  static const String appVersion = '2.1.1';
 }
