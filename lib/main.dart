@@ -200,6 +200,14 @@ class _HomePageState extends State<HomePage>
       }
     }
     setState(() => _result = found);
+    
+    // Debug: print the found record to console (helps verify correct data)
+    if (found != null) {
+      print('Found record for $input: MSAN Code = ${found.msanCode}');
+    } else {
+      print('No record found for $input');
+    }
+    
     if (found != null) {
       _animationController.forward();
     } else {
@@ -241,8 +249,8 @@ class _HomePageState extends State<HomePage>
         ];
 
         final indices = expected.map((col) => headers.indexWhere((h) =>
-        h.toLowerCase().replaceAll(' ', '') ==
-            col.toLowerCase().replaceAll(' ', ''))).toList();
+            h.toLowerCase().replaceAll(' ', '') ==
+                col.toLowerCase().replaceAll(' ', ''))).toList();
 
         for (int i = 1; i < rows.length; i++) {
           final row = rows[i];
@@ -348,8 +356,8 @@ class _HomePageState extends State<HomePage>
           ];
 
           final indices = expected.map((col) => headers.indexWhere((h) =>
-          h.toLowerCase().replaceAll(' ', '') ==
-              col.toLowerCase().replaceAll(' ', ''))).toList();
+              h.toLowerCase().replaceAll(' ', '') ==
+                  col.toLowerCase().replaceAll(' ', ''))).toList();
 
           for (int i = 1; i < rows.length; i++) {
             final row = rows[i];
@@ -486,7 +494,7 @@ class _HomePageState extends State<HomePage>
                       ),
                     ),
                     validator: (value) =>
-                    value == null || value.isEmpty ? 'Required' : null,
+                        value == null || value.isEmpty ? 'Required' : null,
                   ),
                 );
               }).toList(),
@@ -679,7 +687,6 @@ class _HomePageState extends State<HomePage>
   }
 
   Widget _buildTopCard(bool isArabic, double screenWidth) {
-    // Show import/export buttons only on larger screens (> 600)
     final showButtons = screenWidth > 600;
 
     return Card(
@@ -691,7 +698,6 @@ class _HomePageState extends State<HomePage>
         child: LayoutBuilder(
           builder: (context, constraints) {
             if (constraints.maxWidth > 600) {
-              // Tablet/desktop layout: row with buttons on the right
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -722,7 +728,6 @@ class _HomePageState extends State<HomePage>
                 ],
               );
             } else {
-              // Phone layout: stacked, no buttons
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -883,11 +888,11 @@ class _HomePageState extends State<HomePage>
               Text(
                 _phoneController.text.isEmpty
                     ? (isArabic
-                    ? 'أدخل رقم الهاتف واضغط على أيقونة البحث'
-                    : 'Enter a phone number and tap the search icon')
+                        ? 'أدخل رقم الهاتف واضغط على أيقونة البحث'
+                        : 'Enter a phone number and tap the search icon')
                     : (isArabic
-                    ? 'لم يتم العثور على سجل مطابق'
-                    : 'No matching record found'),
+                        ? 'لم يتم العثور على سجل مطابق'
+                        : 'No matching record found'),
                 style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
                 textAlign: TextAlign.center,
               ),
@@ -929,12 +934,109 @@ class _HomePageState extends State<HomePage>
       'Operator': 'المشغل',
     };
 
+    String cabinetResult = _calculateCabinetResult(record);
+
+    // On phones (width < 600) use a simple ListView to avoid any layout confusion
+    if (screenWidth < 600) {
+      return Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        color: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF00B4AA).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(Icons.check_circle, color: Color(0xFF00B4AA)),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    isArabic ? 'تم العثور على سجل' : 'Record Found',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.edit, color: Color(0xFF00B4AA)),
+                    onPressed: () => _editRecord(record),
+                    tooltip: isArabic ? 'تعديل' : 'Edit',
+                  ),
+                ],
+              ),
+              const Divider(height: 32),
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: fields.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final field = fields[index];
+                  String value;
+                  if (field == 'Cabinet Result') {
+                    value = cabinetResult;
+                  } else {
+                    value = record.toMap()[field] ?? '';
+                  }
+                  final label = isArabic ? arabicNames[field]! : field;
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 120,
+                          child: Text(
+                            label,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF00B4AA),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            value.isEmpty ? '—' : value,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Tablet / Desktop: use responsive grid
     int crossAxisCount = 1;
     if (screenWidth > 1200) crossAxisCount = 4;
     else if (screenWidth > 800) crossAxisCount = 3;
     else if (screenWidth > 500) crossAxisCount = 2;
-
-    String cabinetResult = _calculateCabinetResult(record);
 
     return Card(
       elevation: 0,
@@ -1039,5 +1141,5 @@ class _HomePageState extends State<HomePage>
     super.dispose();
   }
 
-  static const String appVersion = '2.2.1';
+  static const String appVersion = '2.1.0';
 }
